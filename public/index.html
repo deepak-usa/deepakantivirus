@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Endpoint Console Dashboard</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 20px; }
+        h1, h2 { color: #f8fafc; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background: #334155; }
+        .alert-row { background: #451a03; color: #f97316; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🛡️ Endpoint Security Central Console</h1>
+    <hr style="border-color: #334155;">
+
+    <div class="grid">
+        <div class="card">
+            <h2>Connected Agents</h2>
+            <table>
+                <thead>
+                    <tr><th>Agent ID</th><th>OS</th><th>Hostname</th><th>Last Seen</th></tr>
+                </thead>
+                <tbody id="agent-table">
+                    <tr><td colspan="4">Waiting for agents to connect...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Live Threat Alerts</h2>
+            <table>
+                <thead>
+                    <tr><th>Time</th><th>Agent</th><th>File Name</th><th>Action</th></tr>
+                </thead>
+                <tbody id="alert-table">
+                    <tr><td colspan="4" style="color: #64748b;">No threats detected. System secure.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Listen for agent updates
+        socket.on('agent_update', (agents) => {
+            const tbody = document.getElementById('agent-table');
+            tbody.innerHTML = '';
+            if(agents.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4">No active agents.</td></tr>';
+                return;
+            }
+            agents.forEach(([id, data]) => {
+                tbody.innerHTML += `<tr>
+                    <td><strong>${id}</strong></td>
+                    <td>${data.os}</td>
+                    <td>${data.hostname}</td>
+                    <td>${data.lastCheckIn}</td>
+                </tr>`;
+            });
+        });
+
+        // Listen for live malware alerts
+        socket.on('security_alert', (alert) => {
+            const tbody = document.getElementById('alert-table');
+            // Remove the placeholder row if it exists
+            if (tbody.rows[0] && tbody.rows[0].cells.length === 4 && tbody.rows[0].cells[0].style.color) {
+                tbody.innerHTML = '';
+            }
+            
+            const newRow = `<tr class="alert-row">
+                <td>${alert.timestamp}</td>
+                <td>${alert.agentId}</td>
+                <td>⚠️ ${alert.file_name}</td>
+                <td><span style="color: #ef4444;">${alert.action}</span></td>
+            </tr>`;
+            tbody.innerHTML = newRow + tbody.innerHTML; // Prepend new alerts
+        });
+    </script>
+</body>
+</html>
