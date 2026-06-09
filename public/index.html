@@ -2,23 +2,51 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Endpoint Console Dashboard</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 20px; }
-        h1, h2 { color: #f8fafc; }
+        h1, h2, h4 { color: #f8fafc; margin-top: 0; }
+        hr { border: 0; border-top: 1px solid #334155; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .card { background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; }
         th { background: #334155; }
         .alert-row { background: #451a03; color: #f97316; font-weight: bold; }
+        
+        /* Threat Intel Manager Custom Styling */
+        .intel-manager { background: #1e1e2e; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ff5555; }
+        .intel-form { display: flex; gap: 10px; margin-bottom: 15px; }
+        .intel-input { flex: 2; padding: 10px; background: #313244; border: 1px solid #45475a; color: white; border-radius: 4px; font-family: inherit; }
+        .intel-input-short { flex: 1; padding: 10px; background: #313244; border: 1px solid #45475a; color: white; border-radius: 4px; font-family: inherit; }
+        .intel-btn { background: #ff5555; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .intel-btn:hover { background: #ff3333; }
+        .intel-list { list-style: none; padding: 0; max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 13px; color: #cdd6f4; background: #11111b; padding: 10px; border-radius: 4px; margin: 0; }
     </style>
 </head>
 <body>
 
     <h1>🛡️ Endpoint Security Central Console</h1>
-    <hr style="border-color: #334155;">
+    <hr>
+
+    <div class="intel-manager">
+        <h3 style="margin-top: 0; color: #ff5555; display: flex; align-items: center; gap: 8px;">
+            🦅 Global Threat Intelligence Manager
+        </h3>
+        <p style="font-size: 14px; color: #a6adc8; margin-top: 4px; margin-bottom: 15px;">Inject custom SHA-256 signatures directly into the MongoDB global runtime engine.</p>
+        
+        <div class="intel-form">
+            <input type="text" id="newHashInput" placeholder="Enter Target SHA-256 Signature Hash" class="intel-input">
+            <input type="text" id="newHashDesc" placeholder="Label/Description (e.g. Trojan.Win32)" class="intel-input-short">
+            <button onclick="submitNewHash()" class="intel-btn">Deploy Rule</button>
+        </div>
+
+        <h4>Currently Active Indicators of Compromise (IoC)</h4>
+        <ul id="activeHashesList" class="intel-list">
+            </ul>
+    </div>
 
     <div class="grid">
         <div class="card">
@@ -49,7 +77,7 @@
     <script>
         const socket = io();
 
-        // Listen for agent updates
+        // 1. Process and Render Inbound Agent Heartbeats
         socket.on('agent_update', (agents) => {
             const tbody = document.getElementById('agent-table');
             tbody.innerHTML = '';
@@ -67,10 +95,47 @@
             });
         });
 
-        // Listen for live malware alerts
+        // 2. Submit New Signature Hashes to Admin Controller API
+        async function submitNewHash() {
+            const hash = document.getElementById('newHashInput').value.trim();
+            const description = document.getElementById('newHashDesc').value.trim();
+            
+            if(!hash) return alert('Please enter a valid hash signature');
+
+            const response = await fetch('/api/hashes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hash, description })
+            });
+            
+            const result = await response.json();
+            if(result.success) {
+                document.getElementById('newHashInput').value = '';
+                document.getElementById('newHashDesc').value = '';
+            } else {
+                alert(result.error || 'Failed to deploy intelligence rule');
+            }
+        }
+
+        // 3. Process Dynamic Signature Database Real-Time Updates
+        socket.on('hash_list_update', (hashes) => {
+            const container = document.getElementById('activeHashesList');
+            container.innerHTML = hashes.length === 0 ? '<li style="color:#6c7086; list-style:none;">No active signatures registered in cloud database.</li>' : '';
+            
+            hashes.forEach(item => {
+                const li = document.createElement('li');
+                li.style.padding = "6px 0";
+                li.style.borderBottom = "1px solid #313244";
+                li.innerHTML = `<span style="color: #f9e2af">[${item.createdAt || 'Active'}]</span> <b style="color: #ff5555; font-family: monospace;">${item.hash}</b> — <i>${item.description}</i>`;
+                container.appendChild(li);
+            });
+        });
+
+        // 4. Handle Real-Time Threat Streams Intercepted by Background Agents
         socket.on('security_alert', (alert) => {
             const tbody = document.getElementById('alert-table');
-            // Remove the placeholder row if it exists
+            
+            // Wipe out standard placeholder secure indicator row if present
             if (tbody.rows[0] && tbody.rows[0].cells.length === 4 && tbody.rows[0].cells[0].style.color) {
                 tbody.innerHTML = '';
             }
@@ -81,7 +146,7 @@
                 <td>⚠️ ${alert.file_name}</td>
                 <td><span style="color: #ef4444;">${alert.action}</span></td>
             </tr>`;
-            tbody.innerHTML = newRow + tbody.innerHTML; // Prepend new alerts
+            tbody.innerHTML = newRow + tbody.innerHTML; // Prepend new anomalies to top of stack
         });
     </script>
 </body>
