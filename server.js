@@ -37,7 +37,6 @@ const ThreatLogSchema = new mongoose.Schema({
 const ThreatLog = mongoose.model('ThreatLog', ThreatLogSchema);
 
 // --- STATIC MALICIOUS SIGNATURE DATABASE ---
-// Mock Database of known malicious file hashes (SHA-256)
 const MALICIOUS_HASHES = [
     "5e884167ac263c947107475d128523ddb292030c50650254e2da3481b7a1d4f4", // Example hash (password)
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"  // Empty file hash
@@ -49,13 +48,13 @@ let connectedAgents = new Map();
 
 // --- API ENDPOINTS FOR THE CLIENT AGENT ---
 
-// 1. Agent Registration / Heartbeat
-app.post('/api/register', (req, res) => {
+// 1. Agent Registration / Heartbeat (Accepts both /api/register and /register)
+app.post(['/api/register', '/register'], (req, res) => {
     const { agentId, os, hostname } = req.body;
     
     connectedAgents.set(agentId, {
-        os,
-        hostname,
+        os: os || "Windows",
+        hostname: hostname || "Unknown Host",
         lastCheckIn: new Date().toLocaleTimeString()
     });
 
@@ -65,8 +64,8 @@ app.post('/api/register', (req, res) => {
     res.json({ status: "registered", interval: 5000 });
 });
 
-// 2. Scan Endpoint (The Verdict Engine)
-app.post('/api/scan', async (req, res) => {
+// 2. Scan Endpoint / Verdict Engine (Accepts both /api/scan and /scan)
+app.post(['/api/scan', '/scan'], async (req, res) => {
     const { agentId, hostname, file_name, hash } = req.body;
     console.log(`[Scan Request] Agent: ${agentId} | File: ${file_name} | Hash: ${hash}`);
 
@@ -107,7 +106,6 @@ app.post('/api/scan', async (req, res) => {
 });
 
 // 3. UI Dashboard Historic Logs Restorer
-// Allows dashboard frontend to request historical items on page load
 app.get('/api/logs', async (req, res) => {
     try {
         const historicalLogs = await ThreatLog.find().sort({ _id: -1 }).limit(50);
@@ -131,7 +129,7 @@ io.on('connection', (socket) => {
 });
 
 // Start Server on Port 5000
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`🚀 Sophos-Style Console running at http://localhost:${PORT}`);
+    console.log(`🚀 Console running on port ${PORT}`);
 });
